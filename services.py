@@ -1,6 +1,6 @@
 from decimal import Decimal, ROUND_DOWN
 from db import SessionLocal, Setting, Order, OrderStatusHistory, User
-import json, threading, time
+import json, threading, time, os
 from urllib.request import Request, urlopen
 
 TRADE_CURRENCIES = ["BTC", "ETH", "USDT", "USDC", "RUB"]
@@ -129,6 +129,40 @@ def quote(sell: str, buy: str, amount: Decimal):
     return rate, fee, net
 
 
+def _notify_admin_new_order(order):
+    """Send an immediate Telegram notification to the exchange administrator."""
+    admin_id = os.getenv("ADMIN_TELEGRAM_ID", "").strip()
+    token = os.getenv("BOT_TOKEN", "").strip()
+    if not admin_id or not token:
+        return
+    try:
+        public_base = os.getenv("PUBLIC_BASE_URL", "").strip() or os.getenv("RENDER_EXTERNAL_URL", "").strip()
+        link = f"\n\n🔗 <a href=\"{public_base.rstrip('/')}/admin/orders/{order.id}\">Открыть заявку в админке</a>" if public_base else ""
+        text = (
+            f"🚨 <b>НОВАЯ ЗАЯВКА #{order.id}</b>\n\n"
+            f"{order.sell_amount} {order.sell_currency} → {order.buy_amount} {order.buy_currency}\n"
+            f"Комиссия: {order.fee_amount} {order.buy_currency}\n"
+            f"Статус: <b>Ожидаем оплату</b>"
+            f"{link}"
+        )
+        payload = json.dumps({"chat_id": admin_id, "text": text, "parse_mode": "HTML"}).encode("utf-8")
+        request = Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "crypto-exchange-demo/1.0"},
+            method="POST",
+        )
+        with urlopen(request, timeout=5):
+            pass
+    except Exception:
+        pass
+
+
+def notify_admin_new_order(order):
+    # Do not slow down order creation waiting for Telegram.
+    threading.Thread(target=_notify_admin_new_order, args=(order,), daemon=True).start()
+
+
 def create_order(telegram_id, sell, buy, amount, payout_address=None):
     sell, buy = sell.upper(), buy.upper()
     if not is_allowed_pair(sell, buy):
@@ -153,6 +187,7 @@ def create_order(telegram_id, sell, buy, amount, payout_address=None):
         db.add(OrderStatusHistory(order_id=order.id, status=order.status))
         db.commit()
         db.refresh(order)
+        notify_admin_new_order(order)
         return order
     except Exception:
         db.rollback()
