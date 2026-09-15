@@ -1,35 +1,14 @@
 let rates={};
 const sell=document.querySelector('#sell'),buy=document.querySelector('#buy'),amount=document.querySelector('#amount');
+const ASSETS=['USDT','BTC','ETH','USDC','RUB'];
 function compact(v,max=8){const n=Number(v);if(!Number.isFinite(n))return '—';return n.toLocaleString('ru-RU',{maximumFractionDigits:max,useGrouping:true})}
 function decimals(c){return c==='BTC'||c==='ETH'?8:2}
 function money(v,c){return compact(v,decimals(c))+' '+c}
-async function loadRates(){try{const r=await fetch('/api/rates');const d=await r.json();rates=d.rates||{};const f=document.querySelector('#statfee');if(f)f.textContent=compact(d.fee_percent,2)+'%';calc()}catch(e){toast('Не удалось загрузить курсы')}}
-function calc(){if(!sell)return;const a=Number(amount.value)||0,s=sell.value,b=buy.value;let r=Number(rates[s+'-'+b]);if(s===b)r=1;if(!Number.isFinite(r)||r<=0){result.value='—';rate.textContent='Уточняется';fee.textContent='—';receive.textContent='—';return}const fp=parseFloat(document.querySelector('#statfee')?.textContent)||1,gross=a*r,f=gross*fp/100,n=gross-f;result.value=compact(n,decimals(b));rate.textContent='1 '+s+' = '+compact(r,8)+' '+b;fee.textContent=money(f,b);receive.textContent=money(n,b)}
-async function create(){
- const a=Number(amount.value)||0;
- if(a<=0)return toast('Введите сумму');
- const button=document.querySelector('#create');
- if(button){button.disabled=true;button.textContent='Создаём заявку…'}
- try{
-  const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sell:sell.value,buy:buy.value,amount:a})});
-  const d=await r.json();
-  if(!d.ok){if(button){button.disabled=false;button.textContent='Создать заявку →'}return toast(d.error||'Ошибка')}
-  // The browser cannot know the visitor's Telegram ID. The safest simple flow is
-  // to send the user directly to the bot deep-link. Telegram then supplies
-  // /start order_ID to the bot, which binds the order to this Telegram account.
-  const tg=d.telegram_link;
-  if(tg){
-   if(button)button.textContent='Открываем Telegram…';
-   window.location.assign(tg);
-  }else{
-   location.href='/order/'+d.order.id;
-  }
- }catch(e){
-  if(button){button.disabled=false;button.textContent='Создать заявку →'}
-  toast('Ошибка соединения')
- }
-}
+function rebuildBuy(){if(!sell||!buy)return;const s=sell.value;const choices=s==='RUB'?ASSETS.filter(x=>x!=='RUB'):['RUB'];buy.innerHTML=choices.map(x=>`<option>${x}</option>`).join('')}
+async function loadRates(){try{const r=await fetch('/api/rates');const d=await r.json();rates=d.rates||{};const f=document.querySelector('#statfee');if(f)f.textContent=compact(d.fee_percent,2)+'%';rebuildBuy();calc()}catch(e){toast('Не удалось загрузить курсы')}}
+function calc(){if(!sell||!buy)return;const a=Number(amount.value)||0,s=sell.value,b=buy.value;const r=Number(rates[s+'-'+b]);if(!Number.isFinite(r)||r<=0){result.value='—';rate.textContent='Уточняется';fee.textContent='—';receive.textContent='—';return}const fp=parseFloat(document.querySelector('#statfee')?.textContent)||2,gross=a*r,f=gross*fp/100,n=gross-f;result.value=compact(n,decimals(b));rate.textContent='1 '+s+' = '+compact(r,8)+' '+b;fee.textContent=money(f,b);receive.textContent=money(n,b)}
+async function create(){const a=Number(amount.value)||0;if(a<=0)return toast('Введите сумму');const button=document.querySelector('#create');if(button){button.disabled=true;button.textContent='Создаём заявку…'}try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sell:sell.value,buy:buy.value,amount:a})});const d=await r.json();if(!d.ok){if(button){button.disabled=false;button.textContent='Создать заявку →'}return toast(d.error||'Ошибка')}const tg=d.telegram_link;if(tg){if(button)button.textContent='Открываем Telegram…';window.location.assign(tg)}else{location.href='/order/'+d.order.id}}catch(e){if(button){button.disabled=false;button.textContent='Создать заявку →'}toast('Ошибка соединения')}}
 function toast(t){const x=document.querySelector('#toast');if(!x)return;x.textContent=t;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),2500)}
-if(sell){[sell,buy,amount].forEach(x=>x.addEventListener('input',calc));document.querySelector('#swap').onclick=()=>{const x=sell.value;sell.value=buy.value;buy.value=x;calc()};document.querySelector('#create').onclick=create;loadRates()}
+if(sell){rebuildBuy();[sell,buy,amount].forEach(x=>x.addEventListener('input',()=>{if(x===sell)rebuildBuy();calc()}));document.querySelector('#swap').onclick=()=>{if(sell.value==='RUB'){sell.value=buy.value}else{sell.value='RUB'};rebuildBuy();calc()};document.querySelector('#create').onclick=create;loadRates()}
 const find=document.querySelector('#find');
 if(find)find.onclick=async()=>{const id=document.querySelector('#orderId').value.trim();if(!id)return;try{const r=await fetch('/api/orders/'+encodeURIComponent(id));const d=await r.json(),box=document.querySelector('#orderBox');if(!d.ok){box.innerHTML='<div class="found">Заявка не найдена.</div>';return}const o=d.order;box.innerHTML='<div class="found"><div>'+o.status_label+'</div><strong>#'+o.id+' · '+money(o.sell_amount,o.sell)+' → '+money(o.buy_amount,o.buy)+'</strong><div>Курс: '+compact(o.rate,8)+' '+o.buy+'/'+o.sell+' · Комиссия: '+money(o.fee,o.buy)+'</div><a class="telegram-link" href="https://t.me/kupiusdtbot?start=order_'+o.id+'">🔗 Открыть Telegram и привязать заявку</a><a class="telegram-link" style="background:#fff;color:#111827" href="/order/'+o.id+'">Открыть полную карточку</a></div>'}catch(e){toast('Ошибка проверки заявки')}};
