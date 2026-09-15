@@ -1,5 +1,5 @@
 from decimal import Decimal, ROUND_DOWN
-from db import SessionLocal, Setting, Order, OrderStatusHistory
+from db import SessionLocal, Setting, Order, OrderStatusHistory, User
 
 import json
 import threading
@@ -10,12 +10,10 @@ SUPPORTED = ["BTC", "ETH", "USDT", "USDC", "EUR", "RUB"]
 
 # Rapira public market-data API.
 RAPIRA_RATES_URL = "https://api.rapira.net/open/market/rates"
-RAPIRA_CACHE_TTL = 15  # seconds; keeps us comfortably below Rapira's limits.
+RAPIRA_CACHE_TTL = 15
 _RAPIRA_CACHE = {"expires": 0.0, "data": {}}
 _RAPIRA_LOCK = threading.Lock()
 
-# Local fallback rates are used only when Rapira does not publish a pair
-# or when the public API is temporarily unavailable.
 FALLBACK_RATES = {
     "rate_USDT_BTC": "0.00001",
     "rate_BTC_USDT": "100000",
@@ -31,20 +29,14 @@ FALLBACK_RATES = {
 
 
 def _fetch_rapira_rates():
-    """Return Rapira market rows keyed by symbol, cached for a few seconds."""
     now = time.monotonic()
     if now < _RAPIRA_CACHE["expires"]:
         return _RAPIRA_CACHE["data"]
-
     with _RAPIRA_LOCK:
         now = time.monotonic()
         if now < _RAPIRA_CACHE["expires"]:
             return _RAPIRA_CACHE["data"]
-
-        request = Request(
-            RAPIRA_RATES_URL,
-            headers={"Accept": "application/json", "User-Agent": "crypto-exchange-demo/1.0"},
-        )
+        request = Request(RAPIRA_RATES_URL, headers={"Accept": "application/json", "User-Agent": "crypto-exchange-demo/1.0"})
         try:
             with urlopen(request, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -55,27 +47,18 @@ def _fetch_rapira_rates():
                 _RAPIRA_CACHE["expires"] = time.monotonic() + RAPIRA_CACHE_TTL
             return _RAPIRA_CACHE["data"]
         except Exception:
-            # Keep the last successful snapshot for a short outage.
             return _RAPIRA_CACHE["data"]
 
 
 def _rapira_rate(sell: str, buy: str):
-    """Return live executable-side rate for supported Rapira pairs.
-
-    Rapira publishes e.g. BTC/USDT where askPrice is the price to buy BTC
-    with USDT and bidPrice is the price received when selling BTC for USDT.
-    """
     if sell == buy:
         return Decimal("1")
-
-    # API symbols are quoted as ASSET/BASE, while our pair is SELL -> BUY.
     direct_symbols = {
         ("USDT", "RUB"): "USDT/RUB",
         ("BTC", "USDT"): "BTC/USDT",
         ("ETH", "USDT"): "ETH/USDT",
         ("USDC", "USDT"): "USDC/USDT",
     }
-
     symbol = direct_symbols.get((sell, buy))
     if symbol:
         row = _fetch_rapira_rates().get(symbol)
@@ -83,8 +66,6 @@ def _rapira_rate(sell: str, buy: str):
             bid = Decimal(str(row.get("bidPrice", 0)))
             if bid > 0:
                 return bid
-
-    # Reverse direction: SELL the base currency and BUY the quoted asset.
     reverse = direct_symbols.get((buy, sell))
     if reverse:
         row = _fetch_rapira_rates().get(reverse)
@@ -92,18 +73,13 @@ def _rapira_rate(sell: str, buy: str):
             ask = Decimal(str(row.get("askPrice", 0)))
             if ask > 0:
                 return Decimal("1") / ask
-
     return None
 
 
 def get_rate(sell: str, buy: str) -> Decimal:
     if sell == buy:
         return Decimal("1")
-
     key = f"rate_{sell}_{buy}"
-
-    # Market pairs come directly from Rapira. Persist the latest successful
-    # value so the admin panel can display exactly the rate used by orders.
     live = _rapira_rate(sell, buy)
     if live is not None and live > 0:
         db = SessionLocal()
@@ -116,8 +92,6 @@ def get_rate(sell: str, buy: str) -> Decimal:
         db.commit()
         db.close()
         return live
-
-    # EUR and any pair not published by Rapira use the saved/local fallback.
     db = SessionLocal()
     row = db.query(Setting).filter_by(key=key).first()
     if row is None:
@@ -126,7 +100,6 @@ def get_rate(sell: str, buy: str) -> Decimal:
         db.commit()
         db.close()
         return Decimal(value)
-
     value = row.value
     db.close()
     return Decimal(value)
@@ -142,21 +115,24 @@ def get_fee_percent() -> Decimal:
 def quote(sell: str, buy: str, amount: Decimal):
     rate = get_rate(sell, buy)
     fee_percent = get_fee_percent()
-
     gross = amount * rate
     fee = gross * fee_percent / Decimal("100")
-    net = (gross - fee).quantize(
-        Decimal("0.000000000001"),
-        rounding=ROUND_DOWN
-    )
-
+    net = (gross - fee).quantize(Decimal("0.000000000001"), rounding=ROUND_DOWN)
     return rate, fee, net
 
 
 def create_order(telegram_id, sell, buy, amount, payout_address=None):
     rate, fee, buy_amount = quote(sell, buy, amount)
-
     db = SessionLocal()
+
+    # Every Telegram customer is registered in the shared users table when
+    # they create an order, so the admin user count cannot lag behind orders.
+    if telegram_id and int(telegram_id) > 0:
+        user = db.query(User).filter_by(telegram_id=int(telegram_id)).first()
+        if user is None:
+            db.add(User(telegram_id=int(telegram_id), username=None))
+            db.flush()
+
     order = Order(
         telegram_id=telegram_id,
         sell_currency=sell,
@@ -169,25 +145,17 @@ def create_order(telegram_id, sell, buy, amount, payout_address=None):
         payout_address=payout_address,
         status="WAITING_PAYMENT",
     )
-
     db.add(order)
     db.flush()
     db.add(OrderStatusHistory(order_id=order.id, status=order.status))
     db.commit()
     db.refresh(order)
     db.close()
-
     return order
 
 
 def list_user_orders(telegram_id, limit=10):
     db = SessionLocal()
-    rows = (
-        db.query(Order)
-        .filter_by(telegram_id=telegram_id)
-        .order_by(Order.id.desc())
-        .limit(limit)
-        .all()
-    )
+    rows = db.query(Order).filter_by(telegram_id=telegram_id).order_by(Order.id.desc()).limit(limit).all()
     db.close()
     return rows
