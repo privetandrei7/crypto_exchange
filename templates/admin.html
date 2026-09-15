@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Crypto Exchange — Админ-панель</title>
   <link rel="stylesheet" href="/static/style.css?v=20260915-11">
+  <style>
+    /* Layout fix: the rates card sits in the narrow left column, so its
+       two-column grid must collapse to one column instead of overflowing
+       into the orders column. Visual design remains unchanged. */
+    .workspace-grid .left-column .rate-grid{grid-template-columns:1fr}
+    .workspace-grid .left-column .rate-grid label{grid-template-columns:minmax(0,1fr) minmax(120px,1fr)}
+    .workspace-grid .left-column .rate-grid input{width:100%;min-width:0}
+    @media(max-width:760px){
+      .workspace-grid .left-column .rate-grid label{grid-template-columns:1fr}
+    }
+  </style>
 </head>
 <body>
 <div class="crypto-admin">
