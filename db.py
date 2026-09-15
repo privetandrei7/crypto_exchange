@@ -64,7 +64,7 @@ class Setting(Base):
 
 
 DEFAULTS = {
-    "fee_percent": "1.0",
+    "fee_percent": "2.0",
     "rate_USDT_BTC": "0.00001", "rate_BTC_USDT": "100000",
     "rate_USDT_ETH": "0.0004", "rate_ETH_USDT": "2500",
     "rate_USDT_USDC": "1", "rate_USDC_USDT": "1",
@@ -90,7 +90,6 @@ def _migrate_history(conn):
     cols = _columns(conn, "order_status_history")
     canonical = {"id", "order_id", "status", "created_at"}
     legacy = bool({"old_status", "new_status"} & cols) or not canonical.issubset(cols)
-    # Even status + a NOT NULL legacy new_status must be rebuilt.
     if not legacy:
         return
 
@@ -151,8 +150,12 @@ def init_db():
     db = SessionLocal()
     try:
         for key, value in DEFAULTS.items():
-            if db.query(Setting).filter_by(key=key).first() is None:
+            row = db.query(Setting).filter_by(key=key).first()
+            if row is None:
                 db.add(Setting(key=key, value=value))
+            elif key == "fee_percent" and row.value == "1.0":
+                # Upgrade the original 1% demo default to the new 2% default.
+                row.value = "2.0"
 
         existing_orders = db.query(Order).all()
         existing_history = {r.order_id for r in db.query(OrderStatusHistory.order_id).all()}
