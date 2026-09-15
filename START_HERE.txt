@@ -1,0 +1,16 @@
+CRYPTO EXCHANGE — CLEAN START
+
+Название папки:
+crypto_exchange
+
+Это чистая версия проекта. В репозиторий НЕ входят .env, .venv и exchange.db.
+Новая база exchange.db создаётся автоматически при запуске.
+
+Локальный запуск Windows:
+1) Скопируйте .env.example в .env и заполните секреты.
+2) Запустите INSTALL.bat.
+3) Запустите START_ALL.bat.
+4) Сайт: http://127.0.0.1:8001/
+5) Админка: http://127.0.0.1:8001/admin
+
+Важно: это DEMO. Реальных blockchain-переводов нет.
