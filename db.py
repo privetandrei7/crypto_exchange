@@ -154,7 +154,6 @@ def init_db():
             if row is None:
                 db.add(Setting(key=key, value=value))
             elif key == "fee_percent" and row.value == "1.0":
-                # Upgrade the original 1% demo default to the new 2% default.
                 row.value = "2.0"
 
         existing_orders = db.query(Order).all()
@@ -162,6 +161,14 @@ def init_db():
         for order in existing_orders:
             if order.id not in existing_history:
                 db.add(OrderStatusHistory(order_id=order.id, status=order.status, created_at=order.created_at))
+
+            # Recover users from historical Telegram orders. This fixes the
+            # situation where orders exist but the users table was lost/empty.
+            if order.telegram_id and order.telegram_id > 0:
+                user = db.query(User).filter_by(telegram_id=order.telegram_id).first()
+                if user is None:
+                    db.add(User(telegram_id=order.telegram_id, username=None))
+
         db.commit()
     finally:
         db.close()
