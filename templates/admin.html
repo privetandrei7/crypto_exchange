@@ -6,12 +6,10 @@
   <title>Crypto Exchange — Админ-панель</title>
   <link rel="stylesheet" href="/static/style.css?v=20260915-11">
   <style>
-    /* Layout fix: the rates card sits in the narrow left column, so its
-       two-column grid must collapse to one column instead of overflowing
-       into the orders column. Visual design remains unchanged. */
     .workspace-grid .left-column .rate-grid{grid-template-columns:1fr}
     .workspace-grid .left-column .rate-grid label{grid-template-columns:minmax(0,1fr) minmax(120px,1fr)}
     .workspace-grid .left-column .rate-grid input{width:100%;min-width:0}
+    .hero-main .coin-block{gap:0}
     @media(max-width:760px){
       .workspace-grid .left-column .rate-grid label{grid-template-columns:1fr}
     }
@@ -58,12 +56,10 @@
         <section class="hero-exchange">
           <div class="hero-main">
             <div class="coin-block">
-              <div class="coin-icon usdt">₮</div>
               <div><span class="hero-label">ОБМЕНЫ</span><strong>{{ stats.orders_total }}</strong><small>всего заявок</small></div>
             </div>
             <div class="hero-arrow">⇄</div>
             <div class="coin-block receive">
-              <div class="coin-icon btc">₿</div>
               <div><span class="hero-label">ГОТОВО</span><strong>{{ stats.completed }}</strong><small>завершённых обменов</small></div>
             </div>
             <div class="hero-status">
