@@ -1,11 +1,22 @@
 from decimal import Decimal, ROUND_DOWN
 from db import SessionLocal, Setting, Order, OrderStatusHistory
 
+import json
+import threading
+import time
+from urllib.request import Request, urlopen
+
 SUPPORTED = ["BTC", "ETH", "USDT", "USDC", "EUR", "RUB"]
 
-# Correct demo rates: amount of BUY currency received for 1 SELL currency.
-# Example: 1 USDT = 0.00001 BTC, therefore 500 USDT = 0.005 BTC before fee.
-CORRECT_RATES = {
+# Rapira public market-data API.
+RAPIRA_RATES_URL = "https://api.rapira.net/open/market/rates"
+RAPIRA_CACHE_TTL = 15  # seconds; keeps us comfortably below Rapira's limits.
+_RAPIRA_CACHE = {"expires": 0.0, "data": {}}
+_RAPIRA_LOCK = threading.Lock()
+
+# Local fallback rates are used only when Rapira does not publish a pair
+# or when the public API is temporarily unavailable.
+FALLBACK_RATES = {
     "rate_USDT_BTC": "0.00001",
     "rate_BTC_USDT": "100000",
     "rate_USDT_ETH": "0.0004",
@@ -18,12 +29,71 @@ CORRECT_RATES = {
     "rate_RUB_USDT": "0.0125",
 }
 
-LEGACY_BAD_RATES = {
-    "rate_USDT_BTC": "100000",
-    "rate_BTC_USDT": "0.00001",
-    "rate_USDT_ETH": "2500",
-    "rate_ETH_USDT": "0.0004",
-}
+
+def _fetch_rapira_rates():
+    """Return Rapira market rows keyed by symbol, cached for a few seconds."""
+    now = time.monotonic()
+    if now < _RAPIRA_CACHE["expires"]:
+        return _RAPIRA_CACHE["data"]
+
+    with _RAPIRA_LOCK:
+        now = time.monotonic()
+        if now < _RAPIRA_CACHE["expires"]:
+            return _RAPIRA_CACHE["data"]
+
+        request = Request(
+            RAPIRA_RATES_URL,
+            headers={"Accept": "application/json", "User-Agent": "crypto-exchange-demo/1.0"},
+        )
+        try:
+            with urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            rows = payload.get("data", [])
+            data = {str(row.get("symbol")): row for row in rows if row.get("symbol")}
+            if data:
+                _RAPIRA_CACHE["data"] = data
+                _RAPIRA_CACHE["expires"] = time.monotonic() + RAPIRA_CACHE_TTL
+            return _RAPIRA_CACHE["data"]
+        except Exception:
+            # Keep the last successful snapshot for a short outage.
+            return _RAPIRA_CACHE["data"]
+
+
+def _rapira_rate(sell: str, buy: str):
+    """Return live executable-side rate for supported Rapira pairs.
+
+    Rapira publishes e.g. BTC/USDT where askPrice is the price to buy BTC
+    with USDT and bidPrice is the price received when selling BTC for USDT.
+    """
+    if sell == buy:
+        return Decimal("1")
+
+    # API symbols are quoted as ASSET/BASE, while our pair is SELL -> BUY.
+    direct_symbols = {
+        ("USDT", "RUB"): "USDT/RUB",
+        ("BTC", "USDT"): "BTC/USDT",
+        ("ETH", "USDT"): "ETH/USDT",
+        ("USDC", "USDT"): "USDC/USDT",
+    }
+
+    symbol = direct_symbols.get((sell, buy))
+    if symbol:
+        row = _fetch_rapira_rates().get(symbol)
+        if row:
+            bid = Decimal(str(row.get("bidPrice", 0)))
+            if bid > 0:
+                return bid
+
+    # Reverse direction: SELL the base currency and BUY the quoted asset.
+    reverse = direct_symbols.get((buy, sell))
+    if reverse:
+        row = _fetch_rapira_rates().get(reverse)
+        if row:
+            ask = Decimal(str(row.get("askPrice", 0)))
+            if ask > 0:
+                return Decimal("1") / ask
+
+    return None
 
 
 def get_rate(sell: str, buy: str) -> Decimal:
@@ -31,21 +101,31 @@ def get_rate(sell: str, buy: str) -> Decimal:
         return Decimal("1")
 
     key = f"rate_{sell}_{buy}"
+
+    # Market pairs come directly from Rapira. Persist the latest successful
+    # value so the admin panel can display exactly the rate used by orders.
+    live = _rapira_rate(sell, buy)
+    if live is not None and live > 0:
+        db = SessionLocal()
+        row = db.query(Setting).filter_by(key=key).first()
+        value = str(live)
+        if row is None:
+            db.add(Setting(key=key, value=value))
+        elif row.value != value:
+            row.value = value
+        db.commit()
+        db.close()
+        return live
+
+    # EUR and any pair not published by Rapira use the saved/local fallback.
     db = SessionLocal()
     row = db.query(Setting).filter_by(key=key).first()
-
     if row is None:
-        value = CORRECT_RATES.get(key, "0")
+        value = FALLBACK_RATES.get(key, "0")
         db.add(Setting(key=key, value=value))
         db.commit()
         db.close()
         return Decimal(value)
-
-    # Fix only the known bad values from the original demo.
-    # This avoids overwriting any rate changed later by an administrator.
-    if key in LEGACY_BAD_RATES and row.value == LEGACY_BAD_RATES[key]:
-        row.value = CORRECT_RATES[key]
-        db.commit()
 
     value = row.value
     db.close()
