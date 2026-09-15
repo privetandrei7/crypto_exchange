@@ -1,1 +1,107 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Заявка №{{ order.id }} — Crypto Exchange</title><link rel="stylesheet" href="/static/style.css"></head><body><div class="admin-detail"><header class="topbar"><div><div class="brand">CRYPTO EXCHANGE</div><div class="sub">Заявка #{{ order.id }}</div></div><a href="/admin">← К списку заявок</a></header><main><div class="detail-title"><div><h1>Заявка №{{ order.id }}</h1><span class="badge">{{ status_labels.get(order.status,order.status) }}</span></div><form method="post" action="/admin/orders/{{ order.id }}/delete" onsubmit="return confirm('Удалить заявку #{{ order.id }}?');"><button class="danger">Удалить</button></form></div><section class="exchange-panel"><h2>Обмен</h2><div class="exchange-grid"><div><small>Отдаёте</small><strong>{{ order.sell_amount|fmt(8,2,True) }} {{ order.sell_currency }}</strong></div><div>→</div><div><small>Получаете</small><strong>{{ order.buy_amount|fmt(8,2,True) }} {{ order.buy_currency }}</strong></div></div><div class="kpis"><div>Курс<strong>{{ order.rate|fmt(8,0,True) }} {{ order.buy_currency }}/{{ order.sell_currency }}</strong></div><div>Комиссия ({{ fee_percent }}%)<strong>{{ order.fee_amount|fmt(8,2,True) }} {{ order.buy_currency }}</strong></div><div>Создана<strong>{{ order.created_at.strftime('%d.%m.%Y %H:%M') if order.created_at else '—' }}</strong></div></div></section><div class="detail-grid"><section class="card"><h2>Управление заявкой</h2><div class="control-buttons">{% for s in statuses %}<form method="post" action="/admin/orders/{{ order.id }}/quick-status"><input type="hidden" name="status" value="{{ s }}"><button {% if s==order.status %}disabled{% endif %}>{{ status_labels[s] }}</button></form>{% endfor %}</div><form method="post" action="/admin/orders/{{ order.id }}/status" class="status-select-row"><select name="status">{% for s in statuses %}<option value="{{ s }}" {% if s==order.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select><button>Сохранить</button></form><p class="note">Все смены статуса сохраняются в истории и, если заявка привязана к Telegram, отправляют уведомление.</p></section><section class="card"><h2>Клиент</h2><p><b>Telegram ID:</b> {{ order.telegram_id }}</p><p><b>Username:</b> {% if user and user.username %}@{{ user.username }}{% else %}Не указан{% endif %}</p><p><b>Пользователь БД:</b> {{ user.id if user else '—' }}</p><h3>Адреса</h3><p class="code">Депозит: {{ order.deposit_address }}</p><p class="code">Выплата: {{ order.payout_address or 'Не указан' }}</p></section></div><section class="card" id="history"><h2>История статусов</h2>{% for h in history|reverse %}<div class="history-row"><b>{{ status_labels.get(h.status,h.status) }}</b><span>{{ h.created_at.strftime('%d.%m.%Y %H:%M') if h.created_at else '—' }}</span></div>{% else %}<p>Истории пока нет.</p>{% endfor %}</section><section class="card" id="comment"><h2>Комментарий администратора</h2><form method="post" action="/admin/orders/{{ order.id }}/comment"><textarea name="text" maxlength="1000" placeholder="Комментарий"></textarea><button class="primary-btn">Сохранить</button></form>{% for c in comments %}<div class="saved-comment"><small>{{ c.created_at.strftime('%d.%m.%Y %H:%M') if c.created_at else '—' }}</small><div>{{ c.text }}</div></div>{% endfor %}</section><div class="demo-warning"><b>⚠ DEMO-режим</b> Реальные переводы и выплаты отключены.</div></main></div></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Заявка №{{ order.id }} — Crypto Exchange</title>
+<link rel="stylesheet" href="/static/style.css?v=20260915-4">
+</head>
+<body class="order-admin-body">
+<div class="admin-detail">
+<header class="topbar order-topbar">
+  <div class="brand-wrap"><div class="brand">CRYPTO EXCHANGE</div><div class="sub">Панель администратора · Заявка #{{ order.id }}</div></div>
+  <div class="top-actions"><span class="live"><i></i> Сервис онлайн</span><a class="back-link" href="/admin">← Все заявки</a></div>
+</header>
+<main>
+  <div class="detail-title order-heading">
+    <div>
+      <div class="eyebrow-admin">ОПЕРАЦИЯ · #{{ order.id }}</div>
+      <h1>Заявка №{{ order.id }}</h1>
+      <span class="badge status-badge status-{{ order.status|lower }}">{{ status_labels.get(order.status,order.status) }}</span>
+    </div>
+    <form method="post" action="/admin/orders/{{ order.id }}/delete" onsubmit="return confirm('Удалить заявку #{{ order.id }}?');">
+      <button class="danger-outline">Удалить заявку</button>
+    </form>
+  </div>
+
+  <section class="exchange-panel premium-exchange">
+    <div class="panel-top"><div><span class="section-kicker">ОБМЕН</span><h2>Сумма операции</h2></div><span class="demo-pill">DEMO</span></div>
+    <div class="exchange-grid big-exchange">
+      <div class="currency-side"><small>Клиент отдаёт</small><strong>{{ order.sell_amount|fmt(8,2,True) }} <em>{{ order.sell_currency }}</em></strong></div>
+      <div class="exchange-arrow">→</div>
+      <div class="currency-side receive-side"><small>Клиент получает</small><strong>{{ order.buy_amount|fmt(8,8,True) }} <em>{{ order.buy_currency }}</em></strong></div>
+    </div>
+    <div class="kpis premium-kpis">
+      <div><span>Курс</span><strong>{{ order.rate|fmt(8,8,True) }} {{ order.buy_currency }}/{{ order.sell_currency }}</strong></div>
+      <div><span>Комиссия · {{ fee_percent }}%</span><strong>{{ order.fee_amount|fmt(8,8,True) }} {{ order.buy_currency }}</strong></div>
+      <div><span>Создана</span><strong>{{ order.created_at.strftime('%d.%m.%Y · %H:%M') if order.created_at else '—' }}</strong></div>
+    </div>
+  </section>
+
+  <div class="detail-grid order-main-grid">
+    <section class="card control-card">
+      <div class="card-head-row"><div><span class="section-kicker">УПРАВЛЕНИЕ</span><h2>Статус заявки</h2></div><span class="auto-refresh">● автообновление 15с</span></div>
+      <div class="status-flow">
+        {% for s in statuses %}
+        <form method="post" action="/admin/orders/{{ order.id }}/quick-status" class="status-action status-action-{{ s|lower }}">
+          <input type="hidden" name="status" value="{{ s }}">
+          <button {% if s==order.status %}disabled{% endif %} title="{{ status_labels[s] }}">{{ status_labels[s] }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      <form method="post" action="/admin/orders/{{ order.id }}/status" class="status-select-row modern-select-row">
+        <select name="status">
+          {% for s in statuses %}<option value="{{ s }}" {% if s==order.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}
+        </select>
+        <button class="primary-btn">Сохранить статус</button>
+      </form>
+      <div class="status-hint">Изменение статуса автоматически добавляется в историю и отправляется клиенту в Telegram, если заявка привязана.</div>
+    </section>
+
+    <section class="card client-card">
+      <div class="card-head-row"><div><span class="section-kicker">КЛИЕНТ</span><h2>Данные клиента</h2></div><span class="client-dot">●</span></div>
+      <div class="client-grid">
+        <div class="client-item"><span>Telegram ID</span><b>{{ order.telegram_id }}</b></div>
+        <div class="client-item"><span>Username</span><b>{% if user and user.username %}@{{ user.username }}{% else %}Не указан{% endif %}</b></div>
+        <div class="client-item"><span>Пользователь БД</span><b>{{ user.id if user else '—' }}</b></div>
+        <div class="client-item"><span>Привязка</span><b class="linked">{% if order.telegram_id and order.telegram_id > 0 %}✓ Telegram подключён{% else %}Не подключён{% endif %}</b></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card addresses-card">
+    <div class="card-head-row"><div><span class="section-kicker">РЕКВИЗИТЫ</span><h2>Адреса операции</h2></div></div>
+    <div class="address-grid">
+      <div class="address-box"><div><span>Депозит · {{ order.sell_currency }}</span><button type="button" class="copy-btn" onclick="copyValue(this,'{{ order.deposit_address }}')">Копировать</button></div><code>{{ order.deposit_address }}</code></div>
+      <div class="address-box"><div><span>Выплата · {{ order.buy_currency }}</span><button type="button" class="copy-btn" onclick="copyValue(this,'{{ order.payout_address or '' }}')">Копировать</button></div><code>{{ order.payout_address or 'Не указан' }}</code></div>
+    </div>
+  </section>
+
+  <div class="detail-grid bottom-grid">
+    <section class="card history-card" id="history">
+      <div class="card-head-row"><div><span class="section-kicker">ЖУРНАЛ</span><h2>История статусов</h2></div><span class="history-count">{{ history|length }}</span></div>
+      <div class="timeline">
+      {% for h in history|reverse %}
+        <div class="timeline-row {% if loop.first %}current{% endif %}"><div class="timeline-dot"></div><div><b>{{ status_labels.get(h.status,h.status) }}</b><span>{{ h.created_at.strftime('%d.%m.%Y %H:%M') if h.created_at else '—' }}</span></div></div>
+      {% else %}<p class="muted">Истории пока нет.</p>{% endfor %}
+      </div>
+    </section>
+    <section class="card comment-card" id="comment">
+      <div class="card-head-row"><div><span class="section-kicker">ВНУТРЕННИЕ ЗАМЕТКИ</span><h2>Комментарий администратора</h2></div></div>
+      <form method="post" action="/admin/orders/{{ order.id }}/comment"><textarea name="text" maxlength="1000" placeholder="Напишите заметку по заявке…"></textarea><div class="comment-actions"><span>До 1000 символов</span><button class="primary-btn">Сохранить заметку</button></div></form>
+      {% for c in comments %}<div class="saved-comment"><small>{{ c.created_at.strftime('%d.%m.%Y %H:%M') if c.created_at else '—' }}</small><div>{{ c.text }}</div></div>{% endfor %}
+    </section>
+  </div>
+
+  <div class="demo-warning"><b>⚠ DEMO-режим</b><span>Реальные blockchain-переводы, депозиты и выплаты отключены. Все операции являются демонстрационными.</span></div>
+</main>
+</div>
+<script>
+async function copyValue(btn,value){
+  if(!value)return;
+  try{await navigator.clipboard.writeText(value);const old=btn.textContent;btn.textContent='✓ Скопировано';setTimeout(()=>btn.textContent=old,1600)}catch(e){window.prompt('Скопируйте значение:',value)}
+}
+setTimeout(()=>location.reload(),15000);
+</script>
+</body>
+</html>
