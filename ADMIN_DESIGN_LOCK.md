@@ -2,33 +2,35 @@
 
 Approved visual baseline: **2026-09-15**.
 
-The current Crypto Exchange admin-panel design is the approved final design and must be treated as a protected visual baseline.
+The Crypto Exchange admin panel now uses one unified dark neon fintech design across the **main dashboard and order-detail pages**.
 
 ## Protected files
 - `static/style.css`
 - `templates/admin.html`
 - `templates/admin_order.html`
 
-## Rule
-Do not redesign, replace, simplify, or overwrite these files during future functional changes.
-
-Functional changes to the admin panel must preserve the existing:
+## Visual baseline
 - dark navy fintech background;
 - blue / purple / teal gradients;
-- sidebar and top navigation;
-- statistics cards;
+- permanent left sidebar on desktop;
+- unified top navigation;
+- colorful KPI/stat cards;
 - exchange hero card;
+- clean cards for settings, rates, orders, users and system status;
 - three-column order detail layout;
 - status tracker and timeline;
 - client/address cards;
 - responsive mobile layout;
-- typography, spacing, borders, shadows and buttons.
+- established typography, spacing, borders, shadows and buttons.
 
-If a future feature requires changing the admin UI, modify only the minimum required area and preserve the established visual system.
+## Rule
+Do not redesign, replace, simplify, or overwrite the visual system during future functional changes.
 
-## Baseline commits
-- Admin dashboard CSS: `98285ac966d3e1be115798c4b9889d6e8f1fbb5e`
-- Admin dashboard template: `97b0822f1fd6074b6c40b6988af30fe5d8e58cde`
+If a future feature requires an admin UI change, modify only the minimum required area and preserve the existing visual language. New functionality must be integrated into the current design rather than creating a new visual style.
+
+## Current approved commits
+- Unified admin dashboard: `d4b6a15b07c20a174b7df2b85db558194edae99f`
+- Admin/order styling baseline: `98285ac966d3e1be115798c4b9889d6e8f1fbb5e`
 - Admin order detail template: `5e968915c4d6cc10f564b08c7544738e702948bd`
 
-**Important:** This file is a design contract for future work. New functionality must not cause the approved design to regress.
+**Important:** This file is the design contract for future work. Do not regress or replace the approved admin design.
