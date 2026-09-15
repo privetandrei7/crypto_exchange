@@ -4,103 +4,119 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Заявка №{{ order.id }} — Crypto Exchange</title>
-<link rel="stylesheet" href="/static/style.css?v=20260915-4">
+<link rel="stylesheet" href="/static/style.css?v=20260915-8">
 </head>
-<body class="order-admin-body">
-<div class="admin-detail">
-<header class="topbar order-topbar">
-  <div class="brand-wrap"><div class="brand">CRYPTO EXCHANGE</div><div class="sub">Панель администратора · Заявка #{{ order.id }}</div></div>
-  <div class="top-actions"><span class="live"><i></i> Сервис онлайн</span><a class="back-link" href="/admin">← Все заявки</a></div>
-</header>
-<main>
-  <div class="detail-title order-heading">
-    <div>
-      <div class="eyebrow-admin">ОПЕРАЦИЯ · #{{ order.id }}</div>
-      <h1>Заявка №{{ order.id }}</h1>
-      <span class="badge status-badge status-{{ order.status|lower }}">{{ status_labels.get(order.status,order.status) }}</span>
+<body class="crypto-admin">
+<div class="admin-layout">
+  <aside class="sidebar">
+    <div class="side-brand"><span class="brand-coin">₿</span><span>Crypto Exchange</span></div>
+    <nav class="side-nav">
+      <a href="/admin">⌂ <span>Главная</span></a>
+      <a class="active" href="/admin">▣ <span>Заявки</span><b>1</b></a>
+      <a href="/admin">♙ <span>Клиенты</span></a>
+      <a href="/admin">⌁ <span>Курсы</span></a>
+      <a href="/admin">◉ <span>Выплаты</span></a>
+      <a href="/admin">♢ <span>Адреса</span></a>
+      <a href="/admin">⚙ <span>Настройки</span></a>
+    </nav>
+    <div class="side-bottom">
+      <div class="service-state"><span class="online-dot"></span><div><strong>Сервис работает</strong><small>● Бот: @{{ bot_username|default('kupiusdtbot') }}</small></div></div>
+      <div class="last-sync">Последнее обновление<br><b>{{ order.created_at.strftime('%d.%m.%Y %H:%M') if order.created_at else '—' }}</b></div>
     </div>
-    <form method="post" action="/admin/orders/{{ order.id }}/delete" onsubmit="return confirm('Удалить заявку #{{ order.id }}?');">
-      <button class="danger-outline">Удалить заявку</button>
-    </form>
-  </div>
+  </aside>
 
-  <section class="exchange-panel premium-exchange">
-    <div class="panel-top"><div><span class="section-kicker">ОБМЕН</span><h2>Сумма операции</h2></div><span class="demo-pill">DEMO</span></div>
-    <div class="exchange-grid big-exchange">
-      <div class="currency-side"><small>Клиент отдаёт</small><strong>{{ order.sell_amount|fmt(8,2,True) }} <em>{{ order.sell_currency }}</em></strong></div>
-      <div class="exchange-arrow">→</div>
-      <div class="currency-side receive-side"><small>Клиент получает</small><strong>{{ order.buy_amount|fmt(8,8,True) }} <em>{{ order.buy_currency }}</em></strong></div>
-    </div>
-    <div class="kpis premium-kpis">
-      <div><span>Курс</span><strong>{{ order.rate|fmt(8,8,True) }} {{ order.buy_currency }}/{{ order.sell_currency }}</strong></div>
-      <div><span>Комиссия · {{ fee_percent }}%</span><strong>{{ order.fee_amount|fmt(8,8,True) }} {{ order.buy_currency }}</strong></div>
-      <div><span>Создана</span><strong>{{ order.created_at.strftime('%d.%m.%Y · %H:%M') if order.created_at else '—' }}</strong></div>
-    </div>
-  </section>
-
-  <div class="detail-grid order-main-grid">
-    <section class="card control-card">
-      <div class="card-head-row"><div><span class="section-kicker">УПРАВЛЕНИЕ</span><h2>Статус заявки</h2></div><span class="auto-refresh">● автообновление 15с</span></div>
-      <div class="status-flow">
-        {% for s in statuses %}
-        <form method="post" action="/admin/orders/{{ order.id }}/quick-status" class="status-action status-action-{{ s|lower }}">
-          <input type="hidden" name="status" value="{{ s }}">
-          <button {% if s==order.status %}disabled{% endif %} title="{{ status_labels[s] }}">{{ status_labels[s] }}</button>
-        </form>
-        {% endfor %}
+  <div class="admin-content">
+    <header class="detail-header">
+      <div class="header-left">
+        <a class="back-modern" href="/admin">← &nbsp;К списку заявок</a>
+        <span class="operation-chip">Заявка №{{ order.id }}</span>
+        <div class="created-line">◷ &nbsp;Создана {{ order.created_at.strftime('%d.%m.%Y в %H:%M') if order.created_at else '—' }} <i></i> ⟳ &nbsp;Автообновление 15с</div>
       </div>
-      <form method="post" action="/admin/orders/{{ order.id }}/status" class="status-select-row modern-select-row">
-        <select name="status">
-          {% for s in statuses %}<option value="{{ s }}" {% if s==order.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}
-        </select>
-        <button class="primary-btn">Сохранить статус</button>
-      </form>
-      <div class="status-hint">Изменение статуса автоматически добавляется в историю и отправляется клиенту в Telegram, если заявка привязана.</div>
-    </section>
-
-    <section class="card client-card">
-      <div class="card-head-row"><div><span class="section-kicker">КЛИЕНТ</span><h2>Данные клиента</h2></div><span class="client-dot">●</span></div>
-      <div class="client-grid">
-        <div class="client-item"><span>Telegram ID</span><b>{{ order.telegram_id }}</b></div>
-        <div class="client-item"><span>Username</span><b>{% if user and user.username %}@{{ user.username }}{% else %}Не указан{% endif %}</b></div>
-        <div class="client-item"><span>Пользователь БД</span><b>{{ user.id if user else '—' }}</b></div>
-        <div class="client-item"><span>Привязка</span><b class="linked">{% if order.telegram_id and order.telegram_id > 0 %}✓ Telegram подключён{% else %}Не подключён{% endif %}</b></div>
+      <div class="header-actions">
+        {% if order.telegram_id and order.telegram_id > 0 %}<a class="telegram-btn" href="https://t.me/{{ bot_username|default('kupiusdtbot') }}">➤ &nbsp; Telegram</a>{% endif %}
+        <a class="edit-btn" href="#status">✎ &nbsp;Редактировать</a>
+        <form method="post" action="/admin/orders/{{ order.id }}/delete" onsubmit="return confirm('Удалить заявку #{{ order.id }}?');"><button class="delete-btn">▣ &nbsp;Удалить заявку</button></form>
       </div>
-    </section>
-  </div>
+    </header>
 
-  <section class="card addresses-card">
-    <div class="card-head-row"><div><span class="section-kicker">РЕКВИЗИТЫ</span><h2>Адреса операции</h2></div></div>
-    <div class="address-grid">
-      <div class="address-box"><div><span>Депозит · {{ order.sell_currency }}</span><button type="button" class="copy-btn" onclick="copyValue(this,'{{ order.deposit_address }}')">Копировать</button></div><code>{{ order.deposit_address }}</code></div>
-      <div class="address-box"><div><span>Выплата · {{ order.buy_currency }}</span><button type="button" class="copy-btn" onclick="copyValue(this,'{{ order.payout_address or '' }}')">Копировать</button></div><code>{{ order.payout_address or 'Не указан' }}</code></div>
-    </div>
-  </section>
+    <main>
+      <div class="page-heading"><div><div class="eyebrow-admin">ОПЕРАЦИЯ · #{{ order.id }}</div><h1>Заявка №{{ order.id }}</h1></div><span class="live-status status-{{ order.status|lower }}">● {{ status_labels.get(order.status,order.status) }}</span></div>
 
-  <div class="detail-grid bottom-grid">
-    <section class="card history-card" id="history">
-      <div class="card-head-row"><div><span class="section-kicker">ЖУРНАЛ</span><h2>История статусов</h2></div><span class="history-count">{{ history|length }}</span></div>
-      <div class="timeline">
-      {% for h in history|reverse %}
-        <div class="timeline-row {% if loop.first %}current{% endif %}"><div class="timeline-dot"></div><div><b>{{ status_labels.get(h.status,h.status) }}</b><span>{{ h.created_at.strftime('%d.%m.%Y %H:%M') if h.created_at else '—' }}</span></div></div>
-      {% else %}<p class="muted">Истории пока нет.</p>{% endfor %}
+      <section class="hero-exchange">
+        <div class="hero-glow glow-a"></div><div class="hero-glow glow-b"></div>
+        <div class="hero-main">
+          <div class="coin-block sell"><div class="coin-icon usdt">₮</div><div><span class="hero-label">ОТДАЁТ</span><strong>{{ order.sell_amount|fmt(8,2,True) }} <em>{{ order.sell_currency }}</em></strong><small>{{ 'Tether (TRC20)' if order.sell_currency == 'USDT' else order.sell_currency }}</small></div></div>
+          <div class="hero-arrow">→</div>
+          <div class="coin-block receive"><div class="coin-icon btc">₿</div><div><span class="hero-label">ПОЛУЧАЕТ</span><strong>{{ order.buy_amount|fmt(8,8,True) }} <em>{{ order.buy_currency }}</em></strong><small>{{ 'Bitcoin (BTC)' if order.buy_currency == 'BTC' else order.buy_currency }}</small></div></div>
+          <div class="hero-status"><b>✓ &nbsp;В ПРОЦЕССЕ</b><span>◷ &nbsp;{{ status_labels.get(order.status,order.status) }}</span></div>
+        </div>
+        <div class="hero-kpis">
+          <div><span>⌁</span><label>Курс</label><b>{{ order.rate|fmt(8,8,True) }} {{ order.buy_currency }}/{{ order.sell_currency }}</b></div>
+          <div><span>%</span><label>Комиссия ({{ fee_percent }}%)</label><b>{{ order.fee_amount|fmt(8,8,True) }} {{ order.buy_currency }}</b></div>
+          <div><span>▣</span><label>Создана</label><b>{{ order.created_at.strftime('%d.%m.%Y · %H:%M') if order.created_at else '—' }}</b></div>
+        </div>
+      </section>
+
+      <div class="workspace-grid">
+        <div class="left-column">
+          <section class="dark-card client-card">
+            <div class="card-title"><span class="title-icon blue">♙</span><h2>Клиент</h2>{% if order.telegram_id and order.telegram_id > 0 %}<span class="connected">● Telegram привязан</span>{% endif %}</div>
+            <div class="client-details">
+              <div><span class="mini-icon">➤</span><div><b>Telegram</b><small>ID: {{ order.telegram_id }}</small></div>{% if order.telegram_id and order.telegram_id > 0 %}<mark>Привязан</mark>{% endif %}</div>
+              <div><span class="mini-icon">♙</span><div><b>Username</b><small>{% if user and user.username %}@{{ user.username }}{% else %}Не указан{% endif %}</small></div></div>
+              <div><span class="mini-icon">♙</span><div><b>Пользователь БД</b><small>{{ user.id if user else '—' }}</small></div></div>
+            </div>
+          </section>
+
+          <section class="dark-card addresses-card">
+            <div class="card-title"><span class="title-icon purple">♧</span><h2>Адреса</h2></div>
+            <div class="address-item"><div class="address-head"><b>Депозит <small>(для оплаты)</small></b><button type="button" onclick="copyValue(this,'{{ order.deposit_address }}')">▣ Копировать</button></div><code>{{ order.deposit_address }}</code><a href="#">Открыть в блокчейне ↗</a></div>
+            <div class="address-item"><div class="address-head"><b>Выплата <small>(получаете {{ order.buy_currency }})</small></b><button type="button" onclick="copyValue(this,'{{ order.payout_address or '' }}')">▣ Копировать</button></div><code>{{ order.payout_address or 'Не указан' }}</code><a href="#">Открыть в блокчейне ↗</a></div>
+          </section>
+        </div>
+
+        <div class="center-column">
+          <section class="dark-card status-card" id="status">
+            <div class="card-title"><span class="title-icon green">✓</span><h2>Статус заявки</h2><span class="auto-refresh">⟳ Автообновление 15с</span></div>
+            <div class="status-track">
+              {% set main_statuses = ['WAITING_PAYMENT','PAYMENT_DETECTED','CONFIRMING','PAYOUT_PENDING','PAID'] %}
+              {% for s in main_statuses %}<div class="track-step {% if s==order.status %}current{% elif main_statuses.index(s) < main_statuses.index(order.status) if order.status in main_statuses else false %}done{% endif %}"><i>{% if s==order.status %}➜{% elif main_statuses.index(s) < main_statuses.index(order.status) if order.status in main_statuses else false %}✓{% else %}•{% endif %}</i><b>{{ status_labels.get(s,s) }}</b></div>{% endfor %}
+            </div>
+            <div class="status-buttons">{% for s in statuses %}<form method="post" action="/admin/orders/{{ order.id }}/quick-status"><input type="hidden" name="status" value="{{ s }}"><button class="status-button {% if s==order.status %}selected{% endif %}" {% if s==order.status %}disabled{% endif %}>{{ status_labels[s] }}</button></form>{% endfor %}</div>
+            <form method="post" action="/admin/orders/{{ order.id }}/status" class="status-save"><select name="status">{% for s in statuses %}<option value="{{ s }}" {% if s==order.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select><button>Сохранить статус</button></form>
+            <p class="status-note">Изменение статуса попадёт в историю и отправит уведомление клиенту в Telegram.</p>
+          </section>
+
+          <section class="dark-card history-card">
+            <div class="card-title"><span class="title-icon blue">◷</span><h2>История статусов</h2><span class="history-count">{{ history|length }}</span></div>
+            <div class="timeline">{% for h in history|reverse %}<div class="timeline-item {% if loop.first %}latest{% endif %}"><i>{% if loop.first %}✓{% else %}●{% endif %}</i><div><b>{{ status_labels.get(h.status,h.status) }}</b><span>{{ h.created_at.strftime('%d.%m.%Y · %H:%M') if h.created_at else '—' }}</span><small>{% if loop.first %}Текущий статус заявки{% else %}Система обновила состояние операции{% endif %}</small></div><em>Система</em></div>{% else %}<p class="muted">Истории пока нет.</p>{% endfor %}</div>
+          </section>
+
+          <section class="dark-card comment-card">
+            <div class="card-title"><span class="title-icon purple">▣</span><h2>Комментарий администратора</h2></div>
+            <form method="post" action="/admin/orders/{{ order.id }}/comment"><textarea name="text" maxlength="1000" placeholder="Добавьте комментарий для клиента..."></textarea><button class="send-comment">➤</button><div class="comment-footer"><span>До 1000 символов</span><button class="save-comment">Сохранить заметку</button></div></form>
+            {% for c in comments %}<div class="saved-comment"><small>{{ c.created_at.strftime('%d.%m.%Y %H:%M') if c.created_at else '—' }}</small><div>{{ c.text }}</div></div>{% endfor %}
+          </section>
+        </div>
+
+        <div class="right-column">
+          <section class="dark-card info-card">
+            <div class="card-title"><span class="title-icon blue">◈</span><h2>Дополнительная информация</h2></div>
+            <div class="info-row"><span>◉ &nbsp;Сумма к обмену</span><b>{{ order.sell_amount|fmt(8,2,True) }} {{ order.sell_currency }}</b></div>
+            <div class="info-row"><span>% &nbsp;Курс</span><b>{{ order.rate|fmt(8,8,True) }} {{ order.buy_currency }}/{{ order.sell_currency }}</b></div>
+            <div class="info-row"><span>% &nbsp;Комиссия ({{ fee_percent }}%)</span><b>{{ order.fee_amount|fmt(8,8,True) }} {{ order.buy_currency }}</b></div>
+            <div class="info-row"><span>₿ &nbsp;К получению</span><b>{{ order.buy_amount|fmt(8,8,True) }} {{ order.buy_currency }}</b></div>
+            <div class="info-row"><span>▣ &nbsp;Дата создания</span><b>{{ order.created_at.strftime('%d.%m.%Y · %H:%M') if order.created_at else '—' }}</b></div>
+          </section>
+          <section class="dark-card telegram-card"><div class="card-title"><span class="title-icon purple">➤</span><h2>Быстрые действия</h2></div><a class="send-telegram" href="https://t.me/{{ bot_username|default('kupiusdtbot') }}">➤ &nbsp; Отправить в Telegram</a><p>ⓘ &nbsp;При изменении статуса клиент получит уведомление в Telegram.</p></section>
+        </div>
       </div>
-    </section>
-    <section class="card comment-card" id="comment">
-      <div class="card-head-row"><div><span class="section-kicker">ВНУТРЕННИЕ ЗАМЕТКИ</span><h2>Комментарий администратора</h2></div></div>
-      <form method="post" action="/admin/orders/{{ order.id }}/comment"><textarea name="text" maxlength="1000" placeholder="Напишите заметку по заявке…"></textarea><div class="comment-actions"><span>До 1000 символов</span><button class="primary-btn">Сохранить заметку</button></div></form>
-      {% for c in comments %}<div class="saved-comment"><small>{{ c.created_at.strftime('%d.%m.%Y %H:%M') if c.created_at else '—' }}</small><div>{{ c.text }}</div></div>{% endfor %}
-    </section>
+      <div class="demo-bar"><b>⚠ DEMO-режим</b><span>Реальные blockchain-переводы, депозиты и выплаты отключены. Все операции демонстрационные.</span></div>
+    </main>
   </div>
-
-  <div class="demo-warning"><b>⚠ DEMO-режим</b><span>Реальные blockchain-переводы, депозиты и выплаты отключены. Все операции являются демонстрационными.</span></div>
-</main>
 </div>
 <script>
-async function copyValue(btn,value){
-  if(!value)return;
-  try{await navigator.clipboard.writeText(value);const old=btn.textContent;btn.textContent='✓ Скопировано';setTimeout(()=>btn.textContent=old,1600)}catch(e){window.prompt('Скопируйте значение:',value)}
-}
+async function copyValue(btn,value){if(!value)return;try{await navigator.clipboard.writeText(value);const old=btn.textContent;btn.textContent='✓ Скопировано';setTimeout(()=>btn.textContent=old,1600)}catch(e){window.prompt('Скопируйте значение:',value)}}
 setTimeout(()=>location.reload(),15000);
 </script>
 </body>
