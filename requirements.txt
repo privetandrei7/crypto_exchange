@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+aiogram
+SQLAlchemy
+jinja2
+python-dotenv
