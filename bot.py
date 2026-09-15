@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
 
@@ -23,19 +24,14 @@ STATUS_LABELS = {
     "EXPIRED": "Истёк срок", "MANUAL_REVIEW": "Ручная проверка"
 }
 
-
 def fmt_num(value, max_decimals=8):
-    try:
-        n = Decimal(str(value))
-    except Exception:
-        return str(value)
+    try: n = Decimal(str(value))
+    except Exception: return str(value)
     text = format(n.quantize(Decimal(1).scaleb(-max_decimals)), 'f').rstrip('0').rstrip('.')
     return text or '0'
 
-
 def fmt_money(value, currency):
     return fmt_num(value, 8 if currency in ('BTC','ETH') else 2) + ' ' + currency
-
 
 def main_menu():
     kb = InlineKeyboardBuilder()
@@ -46,14 +42,11 @@ def main_menu():
     kb.adjust(1, 2, 1)
     return kb.as_markup()
 
-
 def currencies(prefix):
     kb = InlineKeyboardBuilder()
-    for c in SUPPORTED:
-        kb.button(text=c, callback_data=f"{prefix}:{c}")
+    for c in SUPPORTED: kb.button(text=c, callback_data=f"{prefix}:{c}")
     kb.adjust(3, 2)
     return kb.as_markup()
-
 
 def confirm_keyboard():
     kb = InlineKeyboardBuilder()
@@ -62,185 +55,113 @@ def confirm_keyboard():
     kb.adjust(2)
     return kb.as_markup()
 
+def bind_order(db, order, telegram_id):
+    order.telegram_id = telegram_id
+    db.commit()
+    return (f"🔗 <b>Заявка #{order.id} привязана к вашему Telegram</b>\n\n"
+            f"{fmt_money(order.sell_amount, order.sell_currency)} → {fmt_money(order.buy_amount, order.buy_currency)}\n"
+            f"Статус: <b>{STATUS_LABELS.get(order.status, order.status)}</b>\n\n"
+            "Теперь изменения статуса этой заявки будут приходить сюда.")
 
 @dp.message(CommandStart())
 async def start(message: Message):
     db = SessionLocal()
     user = db.query(User).filter_by(telegram_id=message.from_user.id).first()
     if not user:
-        db.add(User(telegram_id=message.from_user.id, username=message.from_user.username))
-        db.commit()
+        db.add(User(telegram_id=message.from_user.id, username=message.from_user.username)); db.commit()
+
     payload = (message.text or "").split(maxsplit=1)
     if len(payload) == 2 and payload[1].startswith("order_"):
-        try:
-            order_id = int(payload[1].split("_", 1)[1])
-        except ValueError:
-            order_id = None
+        try: order_id = int(payload[1].split("_", 1)[1])
+        except ValueError: order_id = None
         if order_id:
             order = db.get(Order, order_id)
             if order:
-                order.telegram_id = message.from_user.id
-                db.commit()
-                await message.answer(
-                    f"🔗 <b>Заявка #{order.id} привязана к вашему Telegram</b>\n\n"
-                    f"{order.sell_amount} {order.sell_currency} → {order.buy_amount} {order.buy_currency}\n"
-                    f"Статус: <b>{STATUS_LABELS.get(order.status, order.status)}</b>\n\n"
-                    "Теперь изменения статуса этой заявки будут приходить сюда.",
-                    parse_mode="HTML"
-                )
-                db.close()
-                return
-    db.close()
-    await message.answer(
-        "🪙 <b>CRYPTO EXCHANGE — DEMO</b>\n\n"
-        "Тестовый прототип обменника. Реальных криптоплатежей нет.",
-        reply_markup=main_menu(),
-        parse_mode="HTML"
-    )
+                text = bind_order(db, order, message.from_user.id); db.close()
+                await message.answer(text, parse_mode="HTML"); return
 
+    # Fallback: Telegram can open an already-started bot chat without giving
+    # the deep-link payload as a new /start message. Bind the newest website
+    # order that is still unlinked and was created within the last 15 minutes.
+    cutoff = datetime.utcnow() - timedelta(minutes=15)
+    recent = (db.query(Order)
+              .filter(Order.telegram_id == 0, Order.created_at >= cutoff)
+              .order_by(Order.id.desc()).first())
+    if recent:
+        text = bind_order(db, recent, message.from_user.id); db.close()
+        await message.answer(text, parse_mode="HTML"); return
+
+    db.close()
+    await message.answer("🪙 <b>CRYPTO EXCHANGE — DEMO</b>\n\nТестовый прототип обменника. Реальных криптоплатежей нет.", reply_markup=main_menu(), parse_mode="HTML")
 
 @dp.callback_query(F.data == "exchange")
 async def exchange(call: CallbackQuery):
-    await call.message.edit_text("Что отдаёте?", reply_markup=currencies("sell"))
-    await call.answer()
-
+    await call.message.edit_text("Что отдаёте?", reply_markup=currencies("sell")); await call.answer()
 
 @dp.callback_query(F.data.startswith("sell:"))
 async def sell_selected(call: CallbackQuery):
     sell = call.data.split(":")[1]
-    await call.message.edit_text(
-        f"Отдаёте: <b>{sell}</b>\n\nЧто хотите получить?",
-        reply_markup=currencies(f"buy:{sell}"),
-        parse_mode="HTML"
-    )
-    await call.answer()
-
+    await call.message.edit_text(f"Отдаёте: <b>{sell}</b>\n\nЧто хотите получить?", reply_markup=currencies(f"buy:{sell}"), parse_mode="HTML"); await call.answer()
 
 @dp.callback_query(F.data.startswith("buy:"))
 async def buy_selected(call: CallbackQuery):
     parts = call.data.split(":")
-    if len(parts) != 3:
-        await call.answer("Ошибка выбора валюты.", show_alert=True)
-        return
-
-    _, sell, buy = parts
-    PENDING[call.from_user.id] = {"sell": sell, "buy": buy}
-
-    await call.message.edit_text(
-        f"Отдаёте: <b>{sell}</b>\n"
-        f"Получаете: <b>{buy}</b>\n\n"
-        "Введите сумму, например: <code>500</code>",
-        parse_mode="HTML"
-    )
-    await call.answer()
-
+    if len(parts) != 3: await call.answer("Ошибка выбора валюты.", show_alert=True); return
+    _, sell, buy = parts; PENDING[call.from_user.id] = {"sell": sell, "buy": buy}
+    await call.message.edit_text(f"Отдаёте: <b>{sell}</b>\nПолучаете: <b>{buy}</b>\n\nВведите сумму, например: <code>500</code>", parse_mode="HTML"); await call.answer()
 
 PENDING = {}
-
 
 @dp.message(F.text)
 async def amount_message(message: Message):
     state = PENDING.get(message.from_user.id)
-    if not state or "buy" not in state or state.get("buy") is None:
-        return
+    if not state or "buy" not in state: return
     try:
         amount = Decimal(message.text.replace(",", ".").strip())
-        if amount <= 0:
-            raise InvalidOperation
+        if amount <= 0: raise InvalidOperation
     except InvalidOperation:
-        await message.answer("Введите положительное число, например 500.")
-        return
-    sell, buy = state["sell"], state["buy"]
-    rate, fee, net = quote(sell, buy, amount)
-    if rate <= 0:
-        await message.answer("Для этой пары пока нет тестового курса.")
-        return
-    state["amount"] = amount
-    PENDING[message.from_user.id] = state
-    await message.answer(
-        f"💱 <b>Расчёт</b>\n\n"
-        f"Вы отдаёте: {amount} {sell}\n"
-        f"Курс: {rate} {buy}/{sell}\n"
-        f"Комиссия: {fee} {buy}\n"
-        f"Получаете: <b>{net} {buy}</b>\n\n"
-        "Тестовая заявка. Реальной оплаты не требуется.",
-        reply_markup=confirm_keyboard(),
-        parse_mode="HTML"
-    )
-
+        await message.answer("Введите положительное число, например 500."); return
+    sell, buy = state["sell"], state["buy"]; rate, fee, net = quote(sell, buy, amount)
+    if rate <= 0: await message.answer("Для этой пары пока нет тестового курса."); return
+    state["amount"] = amount; PENDING[message.from_user.id] = state
+    await message.answer(f"💱 <b>Расчёт</b>\n\nВы отдаёте: {amount} {sell}\nКурс: {rate} {buy}/{sell}\nКомиссия: {fee} {buy}\nПолучаете: <b>{net} {buy}</b>\n\nТестовая заявка. Реальной оплаты не требуется.", reply_markup=confirm_keyboard(), parse_mode="HTML")
 
 @dp.callback_query(F.data == "confirm")
 async def confirm(call: CallbackQuery):
     state = PENDING.get(call.from_user.id)
-    if not state or "amount" not in state:
-        await call.answer("Заявка устарела.", show_alert=True)
-        return
-    order = create_order(call.from_user.id, state["sell"], state["buy"], state["amount"])
-    PENDING.pop(call.from_user.id, None)
-    await call.message.edit_text(
-        f"✅ <b>Заявка #{order.id} создана</b>\n\n"
-        f"Отдаёте: {fmt_money(order.sell_amount, order.sell_currency)}\n"
-        f"Получаете: {fmt_money(order.buy_amount, order.buy_currency)}\n\n"
-        f"Тестовый адрес депозита:\n<code>{order.deposit_address}</code>\n\n"
-        "Статус: ⏳ Ожидаем оплату\n\n"
-        "<i>Это demo — переводить средства не нужно.</i>",
-        parse_mode="HTML"
-    )
-    await call.answer()
-
+    if not state or "amount" not in state: await call.answer("Заявка устарела.", show_alert=True); return
+    order = create_order(call.from_user.id, state["sell"], state["buy"], state["amount"]); PENDING.pop(call.from_user.id, None)
+    await call.message.edit_text(f"✅ <b>Заявка #{order.id} создана</b>\n\nОтдаёте: {fmt_money(order.sell_amount, order.sell_currency)}\nПолучаете: {fmt_money(order.buy_amount, order.buy_currency)}\n\nТестовый адрес депозита:\n<code>{order.deposit_address}</code>\n\nСтатус: ⏳ Ожидаем оплату\n\n<i>Это demo — переводить средства не нужно.</i>", parse_mode="HTML"); await call.answer()
 
 @dp.callback_query(F.data == "cancel")
 async def cancel(call: CallbackQuery):
-    PENDING.pop(call.from_user.id, None)
-    await call.message.edit_text("Операция отменена.", reply_markup=main_menu())
-    await call.answer()
-
+    PENDING.pop(call.from_user.id, None); await call.message.edit_text("Операция отменена.", reply_markup=main_menu()); await call.answer()
 
 @dp.callback_query(F.data == "orders")
 async def orders(call: CallbackQuery):
     rows = list_user_orders(call.from_user.id)
-    if not rows:
-        text = "📋 Заявок пока нет."
+    if not rows: text = "📋 Заявок пока нет."
     else:
         lines = ["📋 <b>Мои заявки</b>\n"]
-        for o in rows:
-            lines.append(f"#{o.id} — {fmt_money(o.sell_amount, o.sell_currency)} → {fmt_money(o.buy_amount, o.buy_currency)} — <b>{o.status}</b>")
+        for o in rows: lines.append(f"#{o.id} — {fmt_money(o.sell_amount, o.sell_currency)} → {fmt_money(o.buy_amount, o.buy_currency)} — <b>{STATUS_LABELS.get(o.status, o.status)}</b>")
         text = "\n".join(lines)
-    await call.message.edit_text(text, reply_markup=main_menu(), parse_mode="HTML")
-    await call.answer()
-
+    await call.message.edit_text(text, reply_markup=main_menu(), parse_mode="HTML"); await call.answer()
 
 @dp.callback_query(F.data == "rates")
 async def rates(call: CallbackQuery):
-    pairs = [("USDT","BTC"), ("BTC","USDT"), ("USDT","ETH"), ("ETH","USDT"), ("USDT","USDC"), ("USDC","USDT"), ("EUR","USDT"), ("USDT","EUR"), ("USDT","RUB"), ("RUB","USDT")]
+    pairs = [("USDT","BTC"),("BTC","USDT"),("USDT","ETH"),("ETH","USDT"),("USDT","USDC"),("USDC","USDT"),("EUR","USDT"),("USDT","EUR"),("USDT","RUB"),("RUB","USDT")]
     lines = ["📊 <b>Тестовые курсы</b>\n"]
     for a,b in pairs:
-        r,_,_ = quote(a,b,Decimal("1"))
-        lines.append(f"1 {a} = {fmt_num(r, 8)} {b}")
-    await call.message.edit_text("\n".join(lines), reply_markup=main_menu(), parse_mode="HTML")
-    await call.answer()
-
+        r,_,_ = quote(a,b,Decimal("1")); lines.append(f"1 {a} = {fmt_num(r, 8)} {b}")
+    await call.message.edit_text("\n".join(lines), reply_markup=main_menu(), parse_mode="HTML"); await call.answer()
 
 @dp.callback_query(F.data == "help")
 async def help_cb(call: CallbackQuery):
-    await call.message.edit_text(
-        "❓ <b>Помощь</b>\n\n"
-        "Это демонстрационный обменник.\n"
-        "Все адреса и курсы тестовые. Реальные переводы отключены.",
-        reply_markup=main_menu(),
-        parse_mode="HTML"
-    )
-    await call.answer()
-
+    await call.message.edit_text("❓ <b>Помощь</b>\n\nЭто демонстрационный обменник.\nВсе адреса и курсы тестовые. Реальные переводы отключены.", reply_markup=main_menu(), parse_mode="HTML"); await call.answer()
 
 async def run_bot():
     init_db()
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN не задан в .env")
-    bot = Bot(BOT_TOKEN)
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    if not BOT_TOKEN: raise RuntimeError("BOT_TOKEN не задан в .env")
+    bot = Bot(BOT_TOKEN); await bot.delete_webhook(drop_pending_updates=True); await dp.start_polling(bot)
 
-
-if __name__ == "__main__":
-    asyncio.run(run_bot())
+if __name__ == "__main__": asyncio.run(run_bot())
