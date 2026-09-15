@@ -4,3 +4,4 @@ aiogram
 SQLAlchemy
 jinja2
 python-dotenv
+python-multipart
