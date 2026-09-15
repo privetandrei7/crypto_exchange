@@ -5,136 +5,36 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Crypto Exchange — Админ-панель</title>
   <link rel="stylesheet" href="/static/style.css?v=20260915-11">
-  <style>
-    .workspace-grid .left-column .rate-grid{grid-template-columns:1fr}
-    .workspace-grid .left-column .rate-grid label{grid-template-columns:minmax(0,1fr) minmax(120px,1fr)}
-    .workspace-grid .left-column .rate-grid input{width:100%;min-width:0}
-    .hero-main .coin-block{gap:0}
-    @media(max-width:760px){
-      .workspace-grid .left-column .rate-grid label{grid-template-columns:1fr}
-    }
-  </style>
+  <style>.hero-main .coin-block{gap:0}</style>
 </head>
 <body>
-<div class="crypto-admin">
-  <div class="admin-layout">
-    <aside class="sidebar">
-      <div class="side-brand"><span class="brand-coin">₿</span><span>CRYPTO<br>EXCHANGE</span></div>
-      <nav class="side-nav">
-        <a href="/admin" class="active">▦ <span>Главная</span></a>
-        <a href="#orders">⇄ <span>Заявки</span><b>{{ stats.orders_total }}</b></a>
-        <a href="#rates">◈ <span>Курсы</span></a>
-        <a href="#users">♙ <span>Пользователи</span><b>{{ stats.users }}</b></a>
-        <a href="#settings">⚙ <span>Настройки</span></a>
-      </nav>
-      <div class="side-bottom">
-        <div class="service-state"><span class="online-dot"></span><div><strong>Сервис онлайн</strong><small>DEMO-режим</small></div></div>
-        <div class="last-sync">Последняя синхронизация<br><b>Система работает</b></div>
-      </div>
-    </aside>
-
-    <div class="admin-content">
-      <header class="detail-header">
-        <div class="header-left">
-          <div><div class="eyebrow-admin">ADMIN CONTROL CENTER</div><div class="operation-chip">Панель управления</div></div>
-          <div class="created-line">Контроль заявок, курсов и пользователей</div>
-        </div>
-        <div class="header-actions">
-          <span class="live-status">● DEMO ONLINE</span>
-          <a class="edit-btn" href="/" target="_blank">Открыть сайт ↗</a>
-          <a class="telegram-btn" href="https://t.me/kupiusdtbot" target="_blank">✈ Telegram</a>
-          <a class="delete-btn" style="background:#071f42;border-color:#2d6ba7" href="/admin/logout">Выйти</a>
-        </div>
-      </header>
-
-      <main>
-        <div class="page-heading">
-          <div><h1>Обзор системы</h1></div>
-          <span class="live-status">⚡ Система активна</span>
-        </div>
-
-        <section class="hero-exchange">
-          <div class="hero-main">
-            <div class="coin-block">
-              <div><span class="hero-label">ОБМЕНЫ</span><strong>{{ stats.orders_total }}</strong><small>всего заявок</small></div>
-            </div>
-            <div class="hero-arrow">⇄</div>
-            <div class="coin-block receive">
-              <div><span class="hero-label">ГОТОВО</span><strong>{{ stats.completed }}</strong><small>завершённых обменов</small></div>
-            </div>
-            <div class="hero-status">
-              <b>● СЕРВИС ОНЛАЙН</b>
-              <span>Ожидают оплаты: <strong>{{ stats.waiting }}</strong></span>
-            </div>
-          </div>
-          <div class="hero-kpis">
-            <div><label>Пользователи</label><b>{{ stats.users }}</b></div>
-            <div><label>Комиссия</label><b>{{ settings.get('fee_percent','1.0') }}%</b></div>
-            <div><label>Основной курс</label><b>USDT → RUB {{ settings.get('rate_USDT_RUB','80')|fmt(8,0,True) }}</b></div>
-          </div>
-        </section>
-
-        <div class="workspace-grid">
-          <div class="left-column">
-            <section class="dark-card" id="settings">
-              <div class="card-title"><span class="title-icon">⚙</span><h2>Настройки</h2></div>
-              <div class="client-details">
-                <div><span class="mini-icon">%</span><div><b>Комиссия обменника</b><small>Применяется к новым заявкам</small></div></div>
-              </div>
-              <form method="post" action="/admin/settings" class="settings-form" style="margin-top:10px">
-                <label>Комиссия, %<input name="fee_percent" type="number" step="0.01" min="0" max="100" value="{{ settings.get('fee_percent','1.0') }}"></label>
-                <button class="primary-btn">Сохранить</button>
-              </form>
-            </section>
-
-            <section class="dark-card" id="rates">
-              <div class="card-title"><span class="title-icon">⇄</span><h2>Курсы обмена</h2></div>
-              <p style="color:#7ea4ca;font-size:10px;margin-top:-8px">Текущие DEMO-курсы</p>
-              <form method="post" action="/admin/rates">
-                <div class="rate-grid">{% for key,label in rate_keys %}<label><span>{{ label }}</span><input name="{{ key }}" type="number" step="any" min="0.000000000001" value="{{ settings.get(key,'')|fmt(8,0,False) }}"></label>{% endfor %}</div>
-                <button class="primary-btn">Сохранить все курсы</button>
-              </form>
-            </section>
-          </div>
-
-          <div class="center-column">
-            <section class="dark-card" id="orders">
-              <div class="card-title"><span class="title-icon">▤</span><h2>Последние заявки</h2><span class="history-count">{{ stats.orders_total }} всего</span></div>
-              <div class="orders-list">
-                {% for o in orders %}
-                <article class="order-row">
-                  <div><a class="order-id-link" href="/admin/orders/{{ o.id }}">#{{ o.id }}</a><small>{{ o.created_at.strftime('%d.%m.%Y %H:%M') if o.created_at else '—' }}</small></div>
-                  <div><b>{{ o.sell_amount|fmt(8,2,True) }} {{ o.sell_currency }} → {{ o.buy_amount|fmt(8,2,True) }} {{ o.buy_currency }}</b><small>Telegram ID: {{ o.telegram_id }}</small></div>
-                  <div><span class="badge">{{ status_labels.get(o.status,o.status) }}</span></div>
-                  <div><form method="post" action="/admin/orders/{{ o.id }}/status" class="status-form"><select name="status">{% for s in statuses %}<option value="{{ s }}" {% if o.status==s %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select><button>Изменить</button></form></div>
-                  <a class="detail-btn" href="/admin/orders/{{ o.id }}">Подробнее</a>
-                </article>
-                {% else %}<div class="empty">Заявок пока нет.</div>{% endfor %}
-              </div>
-            </section>
-          </div>
-
-          <div class="right-column">
-            <section class="dark-card" id="users">
-              <div class="card-title"><span class="title-icon">♙</span><h2>Пользователи</h2><span class="history-count">{{ stats.users }}</span></div>
-              <div class="users-grid" style="grid-template-columns:1fr">
-                {% for u in users %}<div class="user-card"><b>{{ '@'+u.username if u.username else 'Без username' }}</b><span>Telegram ID: {{ u.telegram_id }}</span><small>{{ u.created_at.strftime('%d.%m.%Y %H:%M') if u.created_at else '—' }}</small></div>{% else %}<div class="empty">Пользователей пока нет.</div>{% endfor %}
-              </div>
-            </section>
-            <section class="dark-card">
-              <div class="card-title"><span class="title-icon">⚡</span><h2>Система</h2></div>
-              <div class="info-row"><span>Режим</span><b style="color:#31e5ba">DEMO</b></div>
-              <div class="info-row"><span>Telegram-бот</span><b>@kupiusdtbot</b></div>
-              <div class="info-row"><span>USDT → RUB</span><b>{{ settings.get('rate_USDT_RUB','80')|fmt(8,0,True) }}</b></div>
-              <div class="info-row"><span>RUB → USDT</span><b>{{ settings.get('rate_RUB_USDT','0.0125')|fmt(8,0,False) }}</b></div>
-            </section>
-          </div>
-        </div>
-
-        <div class="demo-bar"><b>⚠️ DEMO-режим</b> Реальные блокчейн-переводы, кошельки и выплаты не подключены. Данные SQLite на бесплатном Render могут быть непостоянными.</div>
-      </main>
-    </div>
+<div class="crypto-admin"><div class="admin-layout">
+<aside class="sidebar">
+  <div class="side-brand"><span class="brand-coin">₿</span><span>CRYPTO<br>EXCHANGE</span></div>
+  <nav class="side-nav">
+    <a href="/admin" class="active">▦ <span>Главная</span></a>
+    <a href="#orders">⇄ <span>Заявки</span><b>{{ stats.orders_total }}</b></a>
+    <a href="#users">♙ <span>Пользователи</span><b>{{ stats.users }}</b></a>
+    <a href="#settings">⚙ <span>Настройки</span></a>
+  </nav>
+  <div class="side-bottom">
+    <div class="service-state"><span class="online-dot"></span><div><strong>Сервис онлайн</strong><small>DEMO-режим</small></div></div>
+    <div class="last-sync">Последняя синхронизация<br><b>Система работает</b></div>
   </div>
+</aside>
+<div class="admin-content">
+<header class="detail-header"><div class="header-left"><div><div class="eyebrow-admin">ADMIN CONTROL CENTER</div><div class="operation-chip">Панель управления</div></div><div class="created-line">Контроль заявок и пользователей</div></div><div class="header-actions"><span class="live-status">● DEMO ONLINE</span><a class="edit-btn" href="/" target="_blank">Открыть сайт ↗</a><a class="telegram-btn" href="https://t.me/kupiusdtbot" target="_blank">✈ Telegram</a><a class="delete-btn" style="background:#071f42;border-color:#2d6ba7" href="/admin/logout">Выйти</a></div></header>
+<main>
+<div class="page-heading"><div><h1>Обзор системы</h1></div><span class="live-status">⚡ Система активна</span></div>
+<section class="hero-exchange"><div class="hero-main"><div class="coin-block"><div><span class="hero-label">ОБМЕНЫ</span><strong>{{ stats.orders_total }}</strong><small>всего заявок</small></div></div><div class="hero-arrow">⇄</div><div class="coin-block receive"><div><span class="hero-label">ГОТОВО</span><strong>{{ stats.completed }}</strong><small>завершённых обменов</small></div></div><div class="hero-status"><b>● СЕРВИС ОНЛАЙН</b><span>Ожидают оплаты: <strong>{{ stats.waiting }}</strong></span></div></div><div class="hero-kpis"><div><label>Пользователи</label><b>{{ stats.users }}</b></div><div><label>Комиссия</label><b>{{ settings.get('fee_percent','2.0') }}%</b></div><div><label>Основной курс</label><b>USDT → RUB {{ settings.get('rate_USDT_RUB','80')|fmt(8,0,True) }}</b></div></div></section>
+<div class="workspace-grid">
+<div class="left-column">
+<section class="dark-card" id="settings"><div class="card-title"><span class="title-icon">⚙</span><h2>Настройки</h2></div><div class="client-details"><div><span class="mini-icon">%</span><div><b>Комиссия обменника</b><small>Применяется к новым заявкам</small></div></div></div><form method="post" action="/admin/settings" class="settings-form" style="margin-top:10px"><label>Комиссия, %<input name="fee_percent" type="number" step="0.01" min="0" max="100" value="{{ settings.get('fee_percent','2.0') }}"></label><button class="primary-btn">Сохранить</button></form></section>
+<section class="dark-card"><div class="card-title"><span class="title-icon">₽</span><h2>Правила обмена</h2></div><div class="info-row"><span>USDT ↔ RUB</span><b>RUB</b></div><div class="info-row"><span>BTC ↔ RUB</span><b>RUB</b></div><div class="info-row"><span>ETH ↔ RUB</span><b>RUB</b></div><div class="info-row"><span>USDC ↔ RUB</span><b>RUB</b></div><div class="info-row"><span>EUR</span><b style="color:#ff6688">Отключён</b></div></section>
 </div>
-</body>
-</html>
+<div class="center-column"><section class="dark-card" id="orders"><div class="card-title"><span class="title-icon">▤</span><h2>Последние заявки</h2><span class="history-count">{{ stats.orders_total }} всего</span></div><div class="orders-list">{% for o in orders %}<article class="order-row"><div><a class="order-id-link" href="/admin/orders/{{ o.id }}">#{{ o.id }}</a><small>{{ o.created_at.strftime('%d.%m.%Y %H:%M') if o.created_at else '—' }}</small></div><div><b>{{ o.sell_amount|fmt(8,2,True) }} {{ o.sell_currency }} → {{ o.buy_amount|fmt(8,2,True) }} {{ o.buy_currency }}</b><small>Telegram ID: {{ o.telegram_id }}</small></div><div><span class="badge">{{ status_labels.get(o.status,o.status) }}</span></div><div><form method="post" action="/admin/orders/{{ o.id }}/status" class="status-form"><select name="status">{% for s in statuses %}<option value="{{ s }}" {% if o.status==s %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select><button>Изменить</button></form></div><a class="detail-btn" href="/admin/orders/{{ o.id }}">Подробнее</a></article>{% else %}<div class="empty">Заявок пока нет.</div>{% endfor %}</div></section></div>
+<div class="right-column"><section class="dark-card" id="users"><div class="card-title"><span class="title-icon">♙</span><h2>Пользователи</h2><span class="history-count">{{ stats.users }}</span></div><div class="users-grid" style="grid-template-columns:1fr">{% for u in users %}<div class="user-card"><b>{{ '@'+u.username if u.username else 'Без username' }}</b><span>Telegram ID: {{ u.telegram_id }}</span><small>{{ u.created_at.strftime('%d.%m.%Y %H:%M') if u.created_at else '—' }}</small></div>{% else %}<div class="empty">Пользователей пока нет.</div>{% endfor %}</div></section><section class="dark-card"><div class="card-title"><span class="title-icon">⚡</span><h2>Система</h2></div><div class="info-row"><span>Режим</span><b style="color:#31e5ba">DEMO</b></div><div class="info-row"><span>Telegram-бот</span><b>@kupiusdtbot</b></div><div class="info-row"><span>USDT → RUB</span><b>{{ settings.get('rate_USDT_RUB','80')|fmt(8,0,True) }}</b></div><div class="info-row"><span>RUB → USDT</span><b>{{ settings.get('rate_RUB_USDT','0.0125')|fmt(8,0,False) }}</b></div></section></div>
+</div>
+<div class="demo-bar"><b>⚠️ DEMO-режим</b> Реальные блокчейн-переводы, кошельки и выплаты не подключены. Для сохранения заявок на Render используется внешняя PostgreSQL-база.</div>
+</main></div></div></div>
+</body></html>
