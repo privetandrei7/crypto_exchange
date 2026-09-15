@@ -1,11 +1,16 @@
 let rates={};
+const startup=document.querySelector('#startup'),startupProgress=document.querySelector('#startupProgress'),startupPercent=document.querySelector('#startupPercent');
+let startupTimer=0;
+function hideStartup(){if(!startup)return;startup.classList.add('hide');setTimeout(()=>startup.remove(),650)}
+function animateStartup(){if(!startup)return;let p=70;startupTimer=setInterval(()=>{p=Math.min(96,p+Math.random()*3);if(startupProgress)startupProgress.style.width=p+'%';if(startupPercent)startupPercent.textContent=Math.round(p)+'%';},350)}
+animateStartup();
 const sell=document.querySelector('#sell'),buy=document.querySelector('#buy'),amount=document.querySelector('#amount');
 const ASSETS=['USDT','BTC','ETH','USDC','RUB'];
 function compact(v,max=8){const n=Number(v);if(!Number.isFinite(n))return '—';return n.toLocaleString('ru-RU',{maximumFractionDigits:max,useGrouping:true})}
 function decimals(c){return c==='BTC'||c==='ETH'?8:2}
 function money(v,c){return compact(v,decimals(c))+' '+c}
 function rebuildBuy(){if(!sell||!buy)return;const s=sell.value;const choices=s==='RUB'?ASSETS.filter(x=>x!=='RUB'):['RUB'];buy.innerHTML=choices.map(x=>`<option>${x}</option>`).join('')}
-async function loadRates(){try{const r=await fetch('/api/rates');const d=await r.json();rates=d.rates||{};const f=document.querySelector('#statfee');if(f)f.textContent=compact(d.fee_percent,2)+'%';rebuildBuy();calc()}catch(e){toast('Не удалось загрузить курсы')}}
+async function loadRates(){try{const r=await fetch('/api/rates',{cache:'no-store'});const d=await r.json();rates=d.rates||{};const f=document.querySelector('#statfee');if(f)f.textContent=compact(d.fee_percent,2)+'%';rebuildBuy();calc();if(startupProgress)startupProgress.style.width='100%';if(startupPercent)startupPercent.textContent='100%';clearInterval(startupTimer);setTimeout(hideStartup,250)}catch(e){setTimeout(loadRates,1200)}}
 function calc(){if(!sell||!buy)return;const a=Number(amount.value)||0,s=sell.value,b=buy.value;const r=Number(rates[s+'-'+b]);if(!Number.isFinite(r)||r<=0){result.value='—';rate.textContent='Уточняется';fee.textContent='—';receive.textContent='—';return}const fp=parseFloat(document.querySelector('#statfee')?.textContent)||2,gross=a*r,f=gross*fp/100,n=gross-f;result.value=compact(n,decimals(b));rate.textContent='1 '+s+' = '+compact(r,8)+' '+b;fee.textContent=money(f,b);receive.textContent=money(n,b)}
 async function create(){const a=Number(amount.value)||0;if(a<=0)return toast('Введите сумму');const button=document.querySelector('#create');if(button){button.disabled=true;button.textContent='Создаём заявку…'}try{const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sell:sell.value,buy:buy.value,amount:a})});const d=await r.json();if(!d.ok){if(button){button.disabled=false;button.textContent='Создать заявку →'}return toast(d.error||'Ошибка')}const tg=d.telegram_link;if(tg){if(button)button.textContent='Открываем Telegram…';window.location.assign(tg)}else{location.href='/order/'+d.order.id}}catch(e){if(button){button.disabled=false;button.textContent='Создать заявку →'}toast('Ошибка соединения')}}
 function toast(t){const x=document.querySelector('#toast');if(!x)return;x.textContent=t;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),2500)}
